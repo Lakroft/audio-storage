@@ -1,5 +1,6 @@
 package com.lakroft.audiostorage.service;
 
+import com.lakroft.audiostorage.exception.FFmpegInitException;
 import java.io.IOException;
 import net.bramp.ffmpeg.FFmpeg;
 import net.bramp.ffmpeg.FFprobe;
@@ -18,7 +19,7 @@ public class FFmpegService {
 			this.ffmpeg = new FFmpeg(ffmpegPath);
 			this.ffprobe = new FFprobe(ffprobePath);
 		} catch (IOException e) {
-			throw new RuntimeException("Failed to initialize FFmpeg or FFprobe", e);
+			throw new FFmpegInitException("Failed to initialize FFmpeg or FFprobe", e);
 		}
 	}
 

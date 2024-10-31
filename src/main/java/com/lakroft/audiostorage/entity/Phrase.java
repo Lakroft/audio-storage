@@ -13,5 +13,5 @@ public class Phrase {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	private String phrase;
+	private String phraseText;
 }

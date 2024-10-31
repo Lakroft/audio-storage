@@ -3,6 +3,7 @@ package com.lakroft.audiostorage.controller;
 import com.lakroft.audiostorage.service.AudioService;
 import java.io.File;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/audio")
@@ -29,6 +31,7 @@ public class AudioController {
 			audioService.saveAudioFile(userId, phraseId, file);
 			return ResponseEntity.ok().build();
 		} catch (Exception e) {
+			log.error("Audio upload exception:", e);
 			return ResponseEntity.badRequest().build();
 		}
 	}
@@ -43,6 +46,7 @@ public class AudioController {
 				.contentType(MediaType.parseMediaType("audio/" + audioFormat))
 				.body(resource);
 		} catch (Exception e) {
+			log.error("Audio download exception:", e);
 			return ResponseEntity.notFound().build();
 		}
 	}

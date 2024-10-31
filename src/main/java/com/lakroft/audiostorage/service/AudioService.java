@@ -1,5 +1,6 @@
 package com.lakroft.audiostorage.service;
 
+import com.lakroft.audiostorage.util.AudioFormatUtil;
 import com.lakroft.audiostorage.entity.AudioFile;
 import com.lakroft.audiostorage.entity.Phrase;
 import com.lakroft.audiostorage.entity.User;
@@ -10,6 +11,7 @@ import com.lakroft.audiostorage.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import net.bramp.ffmpeg.FFmpegExecutor;
 import net.bramp.ffmpeg.builder.FFmpegBuilder;
+import net.bramp.ffmpeg.builder.FFmpegOutputBuilder;
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -34,19 +36,14 @@ public class AudioService {
 	private String audioStoragePath;
 
 	public void saveAudioFile(Long userId, Long phraseId, MultipartFile file) throws IOException {
-		// Check if userId and phraseId exist
 		User user = userRepository.findById(userId)
-			.orElseThrow(() -> new IllegalArgumentException("Invalid userId"));
+			.orElseThrow(() -> new IllegalArgumentException("Invalid userId: " + userId));
 		Phrase phrase = phraseRepository.findById(phraseId)
-			.orElseThrow(() -> new IllegalArgumentException("Invalid phraseId"));
+			.orElseThrow(() -> new IllegalArgumentException("Invalid phraseId: " + phraseId));
 
-		// Convert file to wav format
 		File convertedFile = convertToFormat(file, "wav");
-
-		// Save file to disk
 		String filePath = saveFileToDisk(convertedFile);
 
-		// Save file information to the database
 		AudioFile audioFile = new AudioFile();
 		audioFile.setUser(user);
 		audioFile.setPhrase(phrase);
@@ -55,67 +52,53 @@ public class AudioService {
 	}
 
 	public File getAudioFile(Long userId, Long phraseId, String format) throws IOException {
-		// Check if userId and phraseId exist
 		User user = userRepository.findById(userId)
-			.orElseThrow(() -> new IllegalArgumentException("Invalid userId"));
+			.orElseThrow(() -> new IllegalArgumentException("Invalid userId: " + userId));
 		Phrase phrase = phraseRepository.findById(phraseId)
-			.orElseThrow(() -> new IllegalArgumentException("Invalid phraseId"));
+			.orElseThrow(() -> new IllegalArgumentException("Invalid phraseId: " + phraseId));
 
 		AudioFile audioFile = audioFileRepository.findByUserAndPhrase(user, phrase)
-			.orElseThrow(() -> new IllegalArgumentException("Audio file not found"));
+			.orElseThrow(() -> new IllegalArgumentException("Audio file not found for userId: " + userId + " and phraseId: " + phraseId));
 
-		// Convert file to the requested format
 		return convertToFormat(new File(audioFile.getFilePath()), format);
 	}
 
-	File convertToFormat(MultipartFile file, String format) throws IOException {
-		// Save the uploaded file to a temporary file with a unique name
+	private File convertToFormat(MultipartFile file, String format) throws IOException {
 		Path tempFile = Files.createTempFile("upload_", "." + FilenameUtils.getExtension(file.getOriginalFilename()));
 		file.transferTo(tempFile.toFile());
 
-		File convertedFile = null;
 		try {
-			convertedFile = convertToFormat(tempFile.toFile(), format);
+			return convertToFormat(tempFile.toFile(), format);
 		} finally {
-			// Delete the temporary file
 			Files.deleteIfExists(tempFile);
 		}
-
-		return convertedFile;
 	}
 
 	File convertToFormat(File file, String format) throws IOException {
-		// Check if the file already has the desired format
 		String currentFormat = FilenameUtils.getExtension(file.getName());
 		if (currentFormat.equalsIgnoreCase(format)) {
 			return file;
 		}
 
-		// Determine the path for the converted file with a unique name
 		Path convertedFilePath = Files.createTempFile("converted_", "." + format);
-
 		try {
-			// Convert the file to the requested format using ffmpeg
-			FFmpegBuilder builder = new FFmpegBuilder()
+			FFmpegOutputBuilder outputBuilder = new FFmpegBuilder()
 				.setInput(file.getAbsolutePath())
 				.overrideOutputFiles(true)
-				.addOutput(convertedFilePath.toString())
-				.setFormat(format)
-				.done();
+				.addOutput(convertedFilePath.toString());
+			FFmpegBuilder builder = AudioFormatUtil.configureCodec(outputBuilder, format).done();
 
 			FFmpegExecutor executor = new FFmpegExecutor(ffmpegService.getFfmpeg(), ffmpegService.getFfprobe());
 			executor.createJob(builder).run();
 
 			return convertedFilePath.toFile();
 		} catch (Exception e) {
-			// Delete the converted file if conversion fails
 			Files.deleteIfExists(convertedFilePath);
-			throw e;
+			throw new IOException("Failed to convert file to format: " + format, e);
 		}
 	}
 
 	private String saveFileToDisk(File file) throws IOException {
-		// Determine the path for saving the file
 		Path storagePath = Paths.get(audioStoragePath);
 		if (!Files.exists(storagePath)) {
 			Files.createDirectories(storagePath);

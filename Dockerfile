@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y ffmpeg
 WORKDIR /app
 
 # Copy the Maven build file into the container
-COPY target/audio-service-1.0.0.jar /app/audio-service.jar
+COPY target/audio-storage-0.0.1-SNAPSHOT.jar /app/audio-service.jar
 
 # Specify the command to run the application
 ENTRYPOINT ["java", "-jar", "/app/audio-service.jar"]
