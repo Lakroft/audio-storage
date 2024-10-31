@@ -1,5 +1,6 @@
 package com.lakroft.audiostorage.service;
 
+import com.lakroft.audiostorage.exception.AudioConversionException;
 import com.lakroft.audiostorage.util.AudioFormatUtil;
 import com.lakroft.audiostorage.entity.AudioFile;
 import com.lakroft.audiostorage.entity.Phrase;
@@ -9,6 +10,7 @@ import com.lakroft.audiostorage.repository.PhraseRepository;
 import com.lakroft.audiostorage.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import net.bramp.ffmpeg.FFmpegExecutor;
 import net.bramp.ffmpeg.builder.FFmpegBuilder;
 import net.bramp.ffmpeg.builder.FFmpegOutputBuilder;
@@ -23,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AudioService {
@@ -35,14 +38,30 @@ public class AudioService {
 	@Value("${audio.storage.path}")
 	private String audioStoragePath;
 
-	public void saveAudioFile(Long userId, Long phraseId, MultipartFile file) throws IOException {
+	public void saveAudioFile(Long userId, Long phraseId, MultipartFile file) {
 		User user = userRepository.findById(userId)
 			.orElseThrow(() -> new IllegalArgumentException("Invalid userId: " + userId));
 		Phrase phrase = phraseRepository.findById(phraseId)
 			.orElseThrow(() -> new IllegalArgumentException("Invalid phraseId: " + phraseId));
 
-		File convertedFile = convertToFormat(file, "wav");
-		String filePath = saveFileToDisk(convertedFile);
+		File convertedFile = null;
+		String filePath;
+
+		try {
+			convertedFile = convertToFormat(file, "wav");
+			filePath = saveFileToDisk(convertedFile);
+		} catch (IOException e) {
+			log.error("Failed to convert or save audio file", e);
+			throw new AudioConversionException("Failed to convert or save audio file", e);
+		} finally {
+			if (convertedFile != null) {
+				try {
+					Files.deleteIfExists(convertedFile.toPath());
+				} catch (IOException e) {
+					log.error("Failed to delete temporary file: " + convertedFile.getAbsolutePath(), e);
+				}
+			}
+		}
 
 		AudioFile audioFile = new AudioFile();
 		audioFile.setUser(user);
@@ -50,6 +69,7 @@ public class AudioService {
 		audioFile.setFilePath(filePath);
 		audioFileRepository.save(audioFile);
 	}
+
 
 	public File getAudioFile(Long userId, Long phraseId, String format) throws IOException {
 		User user = userRepository.findById(userId)
@@ -67,11 +87,7 @@ public class AudioService {
 		Path tempFile = Files.createTempFile("upload_", "." + FilenameUtils.getExtension(file.getOriginalFilename()));
 		file.transferTo(tempFile.toFile());
 
-		try {
-			return convertToFormat(tempFile.toFile(), format);
-		} finally {
-			Files.deleteIfExists(tempFile);
-		}
+		return convertToFormat(tempFile.toFile(), format);
 	}
 
 	File convertToFormat(File file, String format) throws IOException {
