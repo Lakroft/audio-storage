@@ -6,11 +6,7 @@ import com.lakroft.audiostorage.entity.User;
 import com.lakroft.audiostorage.repository.AudioFileRepository;
 import com.lakroft.audiostorage.repository.PhraseRepository;
 import com.lakroft.audiostorage.repository.UserRepository;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+
 import lombok.RequiredArgsConstructor;
 import net.bramp.ffmpeg.FFmpegExecutor;
 import net.bramp.ffmpeg.builder.FFmpegBuilder;
@@ -18,6 +14,12 @@ import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +41,7 @@ public class AudioService {
 			.orElseThrow(() -> new IllegalArgumentException("Invalid phraseId"));
 
 		// Convert file to wav format
-		File convertedFile = convertToWav(file);
+		File convertedFile = convertToFormat(file, "wav");
 
 		// Save file to disk
 		String filePath = saveFileToDisk(convertedFile);
@@ -66,26 +68,50 @@ public class AudioService {
 		return convertToFormat(new File(audioFile.getFilePath()), format);
 	}
 
-	private File convertToWav(MultipartFile file) throws IOException {
-		// Save the uploaded file to a temporary file
-		Path tempFile = Files.createTempFile("upload", "." + FilenameUtils.getExtension(file.getOriginalFilename()));
+	File convertToFormat(MultipartFile file, String format) throws IOException {
+		// Save the uploaded file to a temporary file with a unique name
+		Path tempFile = Files.createTempFile("upload_", "." + FilenameUtils.getExtension(file.getOriginalFilename()));
 		file.transferTo(tempFile.toFile());
 
-		// Determine the path for the converted file
-		Path convertedFilePath = Files.createTempFile("converted", ".wav");
+		File convertedFile = null;
+		try {
+			convertedFile = convertToFormat(tempFile.toFile(), format);
+		} finally {
+			// Delete the temporary file
+			Files.deleteIfExists(tempFile);
+		}
 
-		// Convert the file to wav format using ffmpeg
-		FFmpegBuilder builder = new FFmpegBuilder()
-			.setInput(tempFile.toString())
-			.overrideOutputFiles(true)
-			.addOutput(convertedFilePath.toString())
-			.setFormat("wav")
-			.done();
+		return convertedFile;
+	}
 
-		FFmpegExecutor executor = new FFmpegExecutor(ffmpegService.getFfmpeg(), ffmpegService.getFfprobe());
-		executor.createJob(builder).run();
+	File convertToFormat(File file, String format) throws IOException {
+		// Check if the file already has the desired format
+		String currentFormat = FilenameUtils.getExtension(file.getName());
+		if (currentFormat.equalsIgnoreCase(format)) {
+			return file;
+		}
 
-		return convertedFilePath.toFile();
+		// Determine the path for the converted file with a unique name
+		Path convertedFilePath = Files.createTempFile("converted_", "." + format);
+
+		try {
+			// Convert the file to the requested format using ffmpeg
+			FFmpegBuilder builder = new FFmpegBuilder()
+				.setInput(file.getAbsolutePath())
+				.overrideOutputFiles(true)
+				.addOutput(convertedFilePath.toString())
+				.setFormat(format)
+				.done();
+
+			FFmpegExecutor executor = new FFmpegExecutor(ffmpegService.getFfmpeg(), ffmpegService.getFfprobe());
+			executor.createJob(builder).run();
+
+			return convertedFilePath.toFile();
+		} catch (Exception e) {
+			// Delete the converted file if conversion fails
+			Files.deleteIfExists(convertedFilePath);
+			throw e;
+		}
 	}
 
 	private String saveFileToDisk(File file) throws IOException {
@@ -99,23 +125,5 @@ public class AudioService {
 		Files.move(file.toPath(), destinationPath);
 
 		return destinationPath.toString();
-	}
-
-	private File convertToFormat(File file, String format) throws IOException {
-		// Determine the path for the converted file
-		Path convertedFilePath = Files.createTempFile("converted", "." + format);
-
-		// Convert the file to the requested format using ffmpeg
-		FFmpegBuilder builder = new FFmpegBuilder()
-			.setInput(file.getAbsolutePath())
-			.overrideOutputFiles(true)
-			.addOutput(convertedFilePath.toString())
-			.setFormat(format)
-			.done();
-
-		FFmpegExecutor executor = new FFmpegExecutor(ffmpegService.getFfmpeg(), ffmpegService.getFfprobe());
-		executor.createJob(builder).run();
-
-		return convertedFilePath.toFile();
 	}
 }
