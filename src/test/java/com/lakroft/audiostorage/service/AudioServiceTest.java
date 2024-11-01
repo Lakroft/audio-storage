@@ -1,6 +1,8 @@
 package com.lakroft.audiostorage.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -39,7 +41,7 @@ import org.springframework.web.multipart.MultipartFile;
 @TestPropertySource(properties = {
 	"audio.storage.path=${java.io.tmpdir}/audio_storage_test"
 })
-public class AudioServiceTest {
+class AudioServiceTest {
 
 	@MockBean
 	private AudioFileRepository audioFileRepository;
@@ -66,13 +68,13 @@ public class AudioServiceTest {
 	private FFprobe ffprobe;
 
 	@BeforeEach
-	public void setUp() throws IOException {
+	public void setUp() {
 		when(ffmpegService.getFfmpeg()).thenReturn(ffmpeg);
 		when(ffmpegService.getFfprobe()).thenReturn(ffprobe);
 	}
 
 	@Test
-	public void testSaveAudioFile() throws IOException {
+	void testSaveAudioFile() throws IOException {
 		User user = new User();
 		user.setId(1L);
 		Phrase phrase = new Phrase();
@@ -101,7 +103,7 @@ public class AudioServiceTest {
 	}
 
 	@Test
-	public void testConvertToFormat() throws IOException {
+	void testConvertToFormat() throws IOException {
 		File inputFile = Files.createTempFile("input", ".m4a").toFile();
 		String format = "wav";
 
@@ -109,5 +111,97 @@ public class AudioServiceTest {
 
 		assertNotNull(result);
 		assertTrue(result.getName().endsWith(".wav"));
+	}
+
+	@Test
+	void testSaveAudioFileWithInvalidUser() {
+		when(userRepository.findById(anyLong())).thenReturn(Optional.empty());
+		when(phraseRepository.findById(anyLong())).thenReturn(Optional.of(new Phrase()));
+
+		Exception exception = assertThrows(IllegalArgumentException.class, () -> {
+			audioService.saveAudioFile(1L, 1L, multipartFile);
+		});
+
+		String expectedMessage = "Invalid userId: 1";
+		String actualMessage = exception.getMessage();
+
+		assertTrue(actualMessage.contains(expectedMessage));
+	}
+
+	@Test
+	void testSaveAudioFileWithInvalidPhrase() {
+		when(userRepository.findById(anyLong())).thenReturn(Optional.of(new User()));
+		when(phraseRepository.findById(anyLong())).thenReturn(Optional.empty());
+
+		Exception exception = assertThrows(IllegalArgumentException.class, () -> {
+			audioService.saveAudioFile(1L, 1L, multipartFile);
+		});
+
+		String expectedMessage = "Invalid phraseId: 1";
+		String actualMessage = exception.getMessage();
+
+		assertTrue(actualMessage.contains(expectedMessage));
+	}
+
+	@Test
+	void testGetAudioFileWithInvalidUser() {
+		when(userRepository.findById(anyLong())).thenReturn(Optional.empty());
+		when(phraseRepository.findById(anyLong())).thenReturn(Optional.of(new Phrase()));
+
+		Exception exception = assertThrows(IllegalArgumentException.class, () -> {
+			audioService.getAudioFile(1L, 1L, "m4a");
+		});
+
+		String expectedMessage = "Invalid userId: 1";
+		String actualMessage = exception.getMessage();
+
+		assertTrue(actualMessage.contains(expectedMessage));
+	}
+
+	@Test
+	void testGetAudioFileWithInvalidPhrase() {
+		when(userRepository.findById(anyLong())).thenReturn(Optional.of(new User()));
+		when(phraseRepository.findById(anyLong())).thenReturn(Optional.empty());
+
+		Exception exception = assertThrows(IllegalArgumentException.class, () -> {
+			audioService.getAudioFile(1L, 1L, "m4a");
+		});
+
+		String expectedMessage = "Invalid phraseId: 1";
+		String actualMessage = exception.getMessage();
+
+		assertTrue(actualMessage.contains(expectedMessage));
+	}
+
+	@Test
+	void testGetAudioFileNotFound() {
+		User user = new User();
+		user.setId(1L);
+		Phrase phrase = new Phrase();
+		phrase.setId(1L);
+
+		when(userRepository.findById(anyLong())).thenReturn(Optional.of(user));
+		when(phraseRepository.findById(anyLong())).thenReturn(Optional.of(phrase));
+		when(audioFileRepository.findByUserAndPhrase(any(User.class), any(Phrase.class))).thenReturn(Optional.empty());
+
+		Exception exception = assertThrows(IllegalArgumentException.class, () -> {
+			audioService.getAudioFile(1L, 1L, "m4a");
+		});
+
+		String expectedMessage = "Audio file not found for userId: 1 and phraseId: 1";
+		String actualMessage = exception.getMessage();
+
+		assertTrue(actualMessage.contains(expectedMessage));
+	}
+
+	@Test
+	void testConvertToFormatWithSameFormat() throws IOException {
+		File inputFile = Files.createTempFile("input", ".wav").toFile();
+		String format = "wav";
+
+		File result = audioService.convertToFormat(inputFile, format);
+
+		assertNotNull(result);
+		assertEquals(inputFile, result);
 	}
 }

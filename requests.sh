@@ -1,3 +1,7 @@
+docker build -t audio-storage .
+
+
+
 curl --request POST \
   --url http://localhost:8080/users \
   --header 'Content-Type: application/json' \
