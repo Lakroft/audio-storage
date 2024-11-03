@@ -47,12 +47,57 @@ git clone <URL of your repository> cd audio-storage
 mvn clean package
 ```
 
-### Running with Docker
-1. Build the Docker image:
+### Building and running github version in Docker
+1. Create Docker file
+```
+# Use the official Ubuntu image as the base image
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV MAVEN_HOME=/opt/maven
+ENV PATH=$MAVEN_HOME/bin:$PATH
+
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    git \
+    openjdk-17-jdk \
+    maven \
+    ffmpeg \
+    && apt-get clean
+
+# Clone the project repository
+RUN git clone https://github.com/Lakroft/audio-storage /app
+
+# Set the working directory
+WORKDIR /app
+
+# Build the project using Maven
+RUN mvn clean package
+
+# Expose the port the application runs on
+EXPOSE 8080
+
+# Specify the command to run the application
+ENTRYPOINT ["java", "-jar", "target/audio-storage-0.0.1-SNAPSHOT.jar"]
+```
+2. Build the Docker image:
 ```sh
 docker build -t audio-storage .
 ```
-2. Run the Docker container:
+3. Run the Docker container:
+```sh
+docker run -p 8080:8080 audio-storage
+```
+
+### Running local project with Docker
+1. Build project as described above
+2. Build the Docker image:
+```sh
+docker build -t audio-storage .
+```
+3. Run the Docker container:
 ```sh
 docker run -p 8080:8080 audio-storage
 ```
